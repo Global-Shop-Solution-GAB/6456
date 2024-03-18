@@ -1,0 +1,336 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.frmMain..Create(DashForm)
+Gui.frmMain..Size(1089,776)
+Gui.frmMain..MinX(1016)
+Gui.frmMain..MinY(696)
+Gui.frmMain..Position(0,0)
+Gui.frmMain..BackColor(-2147483633)
+Gui.frmMain..MousePointer(0)
+Gui.frmMain..Event(UnLoad,frmMain_UnLoad)
+Gui.frmMain..Caption("ECN Dashboard")
+Gui.frmMain..AlwaysOnTop(False)
+Gui.frmMain..FontName("Tahoma")
+Gui.frmMain..FontSize(8.25)
+Gui.frmMain..ControlBox(True)
+Gui.frmMain..MaxButton(True)
+Gui.frmMain..MinButton(True)
+Gui.frmMain..Moveable(True)
+Gui.frmMain..Sizeable(True)
+Gui.frmMain..ShowInTaskBar(True)
+Gui.frmMain..TitleBar(True)
+Gui.frmMain..BarExportButton(True)
+Gui.frmMain..BarRefreshButton(True)
+Gui.frmMain..BarSearchBox(False)
+Gui.frmMain..Event(ExportClick,frmMain_ExportClick)
+Gui.frmMain..Event(RefreshClick,frmMain_RefreshClick)
+Gui.frmMain..BarAddButton("ResetGridLayout","Reset Grid Layout",V.Enum.Image!LAYOUT_RESET_COLOR)
+Gui.frmMain..BarAddButton("SaveGridLayout","Save Grid Layout",V.Enum.Image!LAYOUT_SAVE_COLOR)
+Gui.frmMain..Event(UserButtonClicked,frmMain_UserButtonClicked)
+Gui.frmMain.GsGCData.Create(GsGridControl)
+Gui.frmMain.GsGCData.Enabled(True)
+Gui.frmMain.GsGCData.Visible(True)
+Gui.frmMain.GsGCData.Zorder(0)
+Gui.frmMain.GsGCData.Size(1089,710)
+Gui.frmMain.GsGCData.Position(0,0)
+Gui.frmMain.GsGCData.Dock(5)
+Gui.frmMain.GsGCData.Anchor(15)
+Gui.frmMain.GsGCData.Event(RowCellClick,GsGCData_RowCellClick)
+Gui.frmMain.GsGCData.Event(CellValueChanged,GsGCData_CellValueChanged)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+	V.Global.sGridViews.Declare
+	V.Global.sSQL.Declare
+Program.External.Include.Library("GCG_6456_UniversalFunctions.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'by Josh Withrow
+'If something breaks, contact Jan Ortiz.
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+'*************************************************************************************************
+'************* Start Dashboard Template Stuff
+
+'REQUIRED/OPTIONAL...
+'Set main form title here.  Could be handled in the forms designer, too...
+'If you set this in the forms designer, make sure this line is commented.
+'Gui.frmMain..Caption("Gridview Template")
+
+'REQUIRED...
+'Set list of controls (grids) that should have their preferences saved.  You know, so they grids load the same way the user left them.
+'FORMNAME*!*CONTROLNAME*!*GRIDVIEWNAME#$#form*!*gsgridcontrol*!*gridview#$#etc*!*etc*!*etc
+'Wash/rinse/repeat for each gridview that you want to store.
+'If there is only one gridview to maintain, only supply the single reference.
+V.Global.sGridViews.Set("frmMain*!*GsGCData*!*gvData")
+'V.Global.sGridViews.Set("frmMain*!*GsGCWindMachines*!*gvWindMachines#$#frmMain*!*GsGCShakers*!*gvShakers")
+
+'IGNORE...
+'Set ARC ID
+'Grabs the ARCID from the filename for use with saving/restoring grid preferences.  So make sure you stick with the file naming convention!
+'Typical file naming convention: DDD_IIII_Description.g2u
+'DDD=Department (GCG, ATG, GAB, etc.)
+'IIII=Reserved ARC ID (5849, 1234, whatever)
+'Description=Short Description of Project
+'Example: GCG_5849_UltimateDashboard.g2u
+F.Intrinsic.Control.CallSub(SetARCID)
+
+'Open DB Connection
+F.ODBC.Connection!con.OpenCompanyConnection(9999)
+
+'************* End Dashboard Template Stuff
+'*************************************************************************************************
+
+'Everything beyond this point isn't tied to the "template", but is project specific programming.
+
+'Make the main form visible
+Gui.frmMain..Visible(True)
+
+'Set SQL query to load data into the grid...
+'SQL Query...  drives everything!
+'A column alias of @Part, @SO, @PO, @WO (just empty column with that heading) will produce a document control link to that entity, and when clicked will launch document control to that item.  
+'A column alias of Part, SO, PO, or WO produce a blue text hyperlink column that, when clicked, lauches S&D, SO View, PO View, or WO View respectively to that entity.  
+'No programming.  Just dropping the appropriate columns into your query(s).
+'
+'Some ground rules...
+'Any PART column that you want to be a link must be aliased to PART, and it must be fully trimmed (no whitespace on either side).  
+' -- Also, LOCATION must be in the query (even if it's not on-screen), too, and must be aliased to LOCATION, LOCN, or LOC.  As long as the column exists 
+'Any SALES ORDER number field that you want to be a link must be aliased to SO
+'Any PURCHASE ORDER number field that you want to be a link must be aliased to PO
+'Any WORK ORDER number field that you want to be a link must have JOB and SUFFIX concatenated together with a hyphen between them. must be aliased to WO
+'Any ROUTER number field that you want to be a link must have the full ROUTER/REV (usually a single field anyway) supplied together into a 20 char string. must be aliased to ROUTER
+' -- CASE WHEN SUFFIX='' THEN JOB ELSE JOB+'-'+SUFFIX END AS WO
+'
+'V.Global.sSQL.Set("select A.Prefix,A.Number,ORIGINATOR,DATE_ECN AS ORIGINATION_DATE,' ' AS '@PART',A.Part_17 as PART,A.PART_REV as REV,A.LOCN,A.INACTIVE_PART AS 'INACTIVE_PART?',A.CHANGE_REV,Left(A.New_Part,17) as NEW_PART,Right(right(A.New_Part,20), 3) as NEW_REV,A.NEW_LOCN,Rtrim(A.New_Desc) as NEW_DESC,B.CHANGE_REASON,B.USER_1 AS ECN_DUE_DATE,B.USER_2 AS ETR,B.USER_3 AS SIGNED_OUT_BY,' ' AS '@WO',B.USER_9 AS WO,' ' AS '@SO',LEFT(B.USER_10,6) AS SO,B.AUTH_LIST AS AUTHORIZATION_LIST,C.STEP_DESC AS STEP_DESCRIPTION from V_ENG_CHG_PART A left outer join V_ECN_HEADER B on A.PREFIX=B.ECN_PREFIX and A.NUMBER=B.ECN_NUMBER left outer join V_ECN_LINES C on A.PREFIX=C.ECN_PREFIX and a.NUMBER=C.ECN_NUMBER and ENGL_DONE<>'Y' Order by A.NUMBER")
+
+'V.Global.sSQL.Set("select A.Prefix,A.Number,ORIGINATOR,DATE_ECN AS ORIGINATION_DATE,' ' AS '@PART',A.Part_17 as PART,A.PART_REV as REV,A.LOCN,A.INACTIVE_PART AS 'INACTIVE_PART?',A.CHANGE_REV,Left(A.New_Part,17) as NEW_PART,Right(right(A.New_Part,20), 3) as NEW_REV,A.NEW_LOCN,Rtrim(A.New_Desc) as NEW_DESC,B.CHANGE_REASON,B.USER_1 AS ECN_DUE_DATE,B.USER_2 AS ETR,B.USER_3 AS SIGNED_OUT_BY,E.TEXT_INFO1 AS CUSTOMER,E.TEXT_INFO2 AS DRAWING,' ' AS '@ROUTER',D.ROUTER,' ' AS '@WO',B.USER_9 AS WO,D.DATE_DUE AS WO_DUE_DATE,(select top 1 z.date_start from v_job_operations z where z.job=D.JOB and z.suffix=D.SUFFIX and z.lmo='L' order by z.seq) AS '1ST_LABOR_DATE',' ' AS '@SO', RTRIM(LTRIM(B.USER_10)) AS SO,B.AUTH_LIST AS AUTHORIZATION_LIST,C.STEP_DESC AS STEP_DESCRIPTION from V_ENG_CHG_PART A left outer join V_ECN_HEADER B on A.PREFIX=B.ECN_PREFIX and A.NUMBER=B.ECN_NUMBER left outer join V_ECN_LINES C on A.PREFIX=C.ECN_PREFIX and a.NUMBER=C.ECN_NUMBER and ENGL_DONE<>'Y' left outer join V_JOB_HEADER D on B.USER_9=D.JOB+'-'+D.SUFFIX left outer join V_INVENTORY_ALL E on A.PART_17+A.PART_REV=E.PART Order by A.NUMBER")
+
+'drawing customer
+'Addition to query from FEQ 
+V.Global.sSQL.Set("select A.Prefix,A.Number,ORIGINATOR,DATE_ECN AS ORIGINATION_DATE,' ' AS '@PART',A.Part_17 as PART,A.PART_REV as REV,A.LOCN,A.INACTIVE_PART AS 'INACTIVE_PART?',A.CHANGE_REV,Left(A.New_Part,17) as NEW_PART,Right(right(A.New_Part,20), 3) as NEW_REV,A.NEW_LOCN,Rtrim(A.New_Desc) as NEW_DESC,B.CHANGE_REASON,B.USER_1 AS ECN_DUE_DATE,B.USER_2 AS ETR,B.USER_3 AS SIGNED_OUT_BY,E.TEXT_INFO1 AS CUSTOMER,E.TEXT_INFO2 AS DRAWING,' ' AS '@ROUTER',D.ROUTER,' ' AS '@WO',B.USER_9 AS WO,D.DATE_DUE AS WO_DUE_DATE,(select top 1 z.date_start from v_job_operations z where z.job=D.JOB and z.suffix=D.SUFFIX and z.lmo='L' order by z.seq) AS '1ST_LABOR_DATE',' ' AS '@SO', RTRIM(LTRIM(B.USER_10)) AS SO,B.AUTH_LIST AS AUTHORIZATION_LIST,C.STEP_DESC AS STEP_DESCRIPTION, F.USER1 as Cad_ID from V_ENG_CHG_PART A left outer join V_ECN_HEADER B on A.PREFIX=B.ECN_PREFIX and A.NUMBER=B.ECN_NUMBER left outer join V_ECN_LINES C on A.PREFIX=C.ECN_PREFIX and a.NUMBER=C.ECN_NUMBER and ENGL_DONE<>'Y' left outer join V_JOB_HEADER D on B.USER_9=D.JOB+'-'+D.SUFFIX left outer join V_INVENTORY_ALL E on A.PART_17+A.PART_REV=E.PART left outer join GAB_4912_USER_FIELDS F on A.PART_17+A.PART_REV=F.PART Order by A.NUMBER")
+
+F.Intrinsic.Control.CallSub(DataLoader)
+
+'load grid preferences
+'technically template stuff.
+F.Intrinsic.Control.CallSub(Deserialize)
+
+Program.Sub.Main.End
+
+Program.Sub.frmMain_UnLoad.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		F.Intrinsic.Control.CallSub(Serialize)
+		F.ODBC.Connection!con.Close
+		F.Intrinsic.Control.End
+		
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_UnLoad.End
+
+Program.Sub.frmMain_ExportClick.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		F.Intrinsic.Control.CallSub(ExportGrid,"sGridControls","frmMain*!*GsGCData")
+		
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_ExportClick.End
+
+Program.Sub.frmMain_RefreshClick.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		F.Intrinsic.Control.CallSub(Serialize)
+		F.Intrinsic.Control.CallSub(DataLoader)
+		F.Intrinsic.Control.CallSub(Deserialize)
+		
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_RefreshClick.End
+
+Program.Sub.frmMain_UserButtonClicked.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		'V.ARGS.BUTTON: ButtonName of the button clicked (not the text/caption, but the control name)...
+		'From ScreenSU...
+		'                           ButtonName
+		'                           \/
+		'Gui.frmMain..BarAddButton("ResetColumns","Reset Columns",V.Enum.Image!LAYOUT_RESET_COLOR)
+		
+		F.Intrinsic.Control.SelectCase(V.Args.Button)
+			
+			F.Intrinsic.Control.Case("ResetGridLayout")
+				F.Intrinsic.Control.CallSub(ResetGrid,"sGridViewName","GVData")
+				F.Intrinsic.Control.CallSub(LoadData, "sDataTableName","dtData","sFormName","frmMain","sGridControlName","GsGCData","sGridViewName","gvData","sSQL",V.Global.sSQL)
+				F.Intrinsic.Control.CallSub(Deserialize)
+				
+			F.Intrinsic.Control.Case("SaveGridLayout")
+				F.Intrinsic.Control.CallSub(Serialize)
+				
+		F.Intrinsic.Control.EndSelect
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_UserButtonClicked.End
+
+Program.Sub.DataLoader.Start
+	'Get data and load into grid(s)
+	'                                                                           Name of form where GridControl lives                     Name of Gridview (usually just the same name as GridControl or DataTable, but with gv prefix)
+	'                                                                           |                                                        |
+	'                                                      Name of DataTable    |                             Name of GridControl to load data into      Basis (SQL query) to load into the grid                                                        If you want to include/wrap the suspend layout in this call, set to TRUE.  Or, if you want to set it manually around it, set it to False.
+	'                                                      \/                   \/                            \/                         \/              \/                                                                                             \/                
+	'F.Intrinsic.Control.CallSub(LoadData,"sDataTableName","dtData","sFormName","frmMain","sGridControlName","GsGCData","sGridViewName","gvData","sSQL","select PART, LOCATION, PRODUCT_LINE, DESCRIPTION from V_INVENTORY_ALL order by PART, LOCATION","bSuspendLayout",True)
+	
+	'Set SQL query to load data into the grid...
+	'SQL Query...  drives everything!
+	'A column alias of @Part, @SO, @PO, @WO (just empty column with that heading) will produce a document control link to that entity, and when clicked will launch document control to that item.  
+	'A column alias of Part, SO, PO, or WO produce a blue text hyperlink column that, when clicked, lauches S&D, SO View, PO View, or WO View respectively to that entity.  
+	'No programming.  Just dropping the appropriate columns into your query(s).
+	'
+	'Some ground rules...
+	'Any PART column that you want to be a link must be aliased to PART, and it must be fully trimmed (no whitespace on either side).  
+	' -- Also, LOCATION must be in the query (even if it's not on-screen), too, and must be named LOCATION, LOCN, or LOC.
+	'Any SALES ORDER number field that you want to be a link must be aliased to SO
+	'Any PURCHASE ORDER number field that you want to be a link must be aliased to PO
+	'Any WORK ORDER number field that you want to be a link must have JOB and SUFFIX concatenated together with a hyphen between them. must be aliased to WO
+	' -- CASE WHEN SUFFIX='' THEN JOB ELSE JOB+'-'+SUFFIX END AS WO
+	
+	V.Local..BulkDeclareString(sColumns, sFieldNames)
+	V.Local..BulkDeclareLong(iCnt)
+	
+	F.Intrinsic.Control.CallSub(LoadData, "sDataTableName","dtData","sFormName","frmMain","sGridControlName","GsGCData","sGridViewName","gvData","sSQL",V.Global.sSQL,"bSuspendLayout",True)
+	
+	Gui.frmMain.GsGCData.SuspendLayout()
+	
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData", "NUMBER", "CellForeColor", "Blue")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData", "PART", "CellForeColor", "Blue")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData", "REV", "CellForeColor", "Blue")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData", "STEP_DESCRIPTION", "CellForeColor", "Blue")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData", "SO", "CellForeColor", "Blue")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData", "WO", "CellForeColor", "Blue")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData", "ROUTER", "CellForeColor", "Blue")
+	
+	'OVERRIDE default behaviors...  make grid editable.
+	'Gui.frmMain.GSGCSOLINES.SetGridViewProperty("gvData","OptionBehaviorEditable",True)
+	'Gui.frmMain.GSGCSOLINES.SetGridViewProperty("gvData","ReadOnly",False)
+	
+	'Because OptionBehaviorEditable was overridden, we need to set the ReadOnly/AllowEdit for every column again because the grid forgets anytime we change OptionBehaviorEditable
+	'This sets every column to NOT allow editing and to be READ ONLY.
+	F.Intrinsic.String.Concat("",V.DataTable.dtData.FieldNames,V.Local.sFieldNames)
+	F.Intrinsic.String.Split(V.Local.sFieldNames,"*!*",V.Local.sColumns)
+	F.Intrinsic.Control.For(V.Local.iCnt,0,V.Local.sColumns.UBound,1)			
+		Gui.frmMain.GsGCData.SetColumnProperty("gvData",V.Local.sColumns(V.Local.iCnt),"AllowEdit",False)
+		Gui.frmMain.GsGCData.SetColumnProperty("gvData",V.Local.sColumns(V.Local.iCnt),"ReadOnly",True)
+	F.Intrinsic.Control.Next(V.Local.iCnt)
+
+	'Set Editable Column(s)
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","SIGNED_OUT_BY","AllowEdit",True)
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","SIGNED_OUT_BY","ReadOnly",False)
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","SIGNED_OUT_BY","CellBackColor","LightYellow")
+	
+	Gui.frmMain.GsGCData.ResumeLayout()
+	
+Program.Sub.DataLoader.End
+
+Program.Sub.GsGCData_RowCellClick.Start
+	'V.Args.Screen: FRMMAIN
+	'V.Args.ControlName:GSGCDATA0
+	'V.Args.EventType: ROWCELLCLICK
+	'V.Args.Column: @Part
+	'V.Args.RowIndex: 0
+	
+	V.Local..BulkDeclareString(sParam,sGSSPart, sFolder, sError, sReturn)
+	V.Local.bDirCheck.Declare(Boolean, False)
+	V.Local.iHandle.Declare(Long, 0)
+	
+	'This sub call will handle all of the basic built in core data entity stuff...
+	'linking to S&D, PO View, SO View, WO View, and DCS Linking
+	'@Part, @SO, @PO, @WO, @ROUTER, PART, SO, PO, WO, ROUTER columns all handled in the basic sense.
+	F.Intrinsic.Control.CallSub(GetActiveGridView,"ControlName",V.Args.ControlName)
+	F.Intrinsic.Control.CallSub(RowCellClick_HandleCoreEntity, "Screen", V.Args.Screen, "ControlName", V.Args.ControlName, "EventType", V.Args.EventType, "Column", V.Args.Column, "RowIndex", V.Args.RowIndex, "GridView", V.Args.GridView)
+	
+	'Handle anything not handled...
+	F.Intrinsic.Control.SelectCase(V.Args.Column.UCase)
+		F.Intrinsic.Control.Case("NUMBER")
+			F.Global.Callwrapper.New("ECNOpen","Quality.OpenEngineeringChangeControl")
+			F.Global.Callwrapper.SetProperty("ECNOpen","Prefix",V.DataTable.dtData(v.Args.RowIndex).Prefix!FieldValTrim)
+			F.Global.Callwrapper.SetProperty("ECNOpen","Number",V.DataTable.dtData(v.Args.RowIndex).Number!FieldValTrim)
+			F.Global.CallWrapper.Run("ECNOpen")
+		F.Intrinsic.Control.Case("STEP_DESCRIPTION")
+			F.Intrinsic.String.GSSPartString(v.DataTable.dtData(v.Args.RowIndex).Part!FieldValTrim, v.DataTable.dtData(v.Args.RowIndex).Rev!FieldValTrim, v.Local.sGssPart)
+			F.Intrinsic.String.ConcatCallWrapperArgs(v.Caller.CompanyCode, V.DataTable.dtData(v.Args.RowIndex).Prefix!FieldValTrim, v.DataTable.dtData(v.Args.RowIndex).Number!FieldValTrim, V.Local.sGSSPart, V.Local.sParam)
+			F.Global.General.CallWrapperSync(3601, v.Local.sParam)
+		F.Intrinsic.Control.Case("DRAWINGZ")
+			
+			'We are going to open the folder location for the drawing. We are hardcoding the path, with the customer and the drawing defining a piece of it
+			F.Intrinsic.Control.If(V.DataTable.dtData(v.Args.RowIndex).Drawing!FieldValTrim, "<>", "")
+				F.Intrinsic.String.Build("\\S0512\fdrive\Customer\{0}\{1}\", V.DataTable.dtData(v.Args.RowIndex).Customer!FieldValTrim, V.DataTable.dtData(v.Args.RowIndex).Drawing!FieldValTrim, V.Local.sFolder)
+				F.Intrinsic.File.DirExists(V.Local.sFolder, V.Local.bDirCheck)
+				F.Intrinsic.Control.If(V.Local.bDirCheck)
+					'Open file directory
+					Function.Intrinsic.UI.ShowOpenFileDialog(V.Local.sFolder, "", V.Local.sReturn)
+					F.Intrinsic.Control.If(V.Local.sReturn.Trim, "<>", "***CANCEL****")
+						
+						F.Intrinsic.Task.ShellExec(V.Local.iHandle, "Edit", V.Local.sReturn, "", "", 1)
+						
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Else
+					'Check just the customer directory
+					F.Intrinsic.String.Build("\\S0512\fdrive\Customer\{0}\", V.DataTable.dtData(v.Args.RowIndex).Customer!FieldValTrim, V.Local.sFolder)
+					F.Intrinsic.File.DirExists(V.Local.sFolder, V.Local.bDirCheck)
+					F.Intrinsic.Control.If(V.Local.bDirCheck)
+						'Open file directory
+						Function.Intrinsic.UI.ShowOpenFileDialog(V.Local.sFolder, "", V.Local.sReturn)
+						F.Intrinsic.Control.If(V.Local.sReturn.Trim, "<>", "***CANCEL****")
+							
+							F.Intrinsic.Task.ShellExec(V.Local.iHandle, "Edit", V.Local.sReturn, "", "", 1)
+							
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.Else
+						'Dir not found at all.. notify user of issue
+						F.Intrinsic.String.Build("Error retrieving location of drawings. Directory {0}{0}{1}{0}{0}was not found.", V.Ambient.NewLine, V.Local.sFolder, V.Local.sError)
+						F.Intrinsic.UI.Msgbox(V.Local.sError, "DIRECTORY NOT FOUND")
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.CaseElse
+	F.Intrinsic.Control.EndSelect
+Program.Sub.GsGCData_RowCellClick.End
+
+Program.Sub.GsGCData_CellValueChanged.Start
+	'V.Args.Screen: FRMMAIN
+	'V.Args.ControlName:GSGCDATA0
+	'V.Args.EventType: ROWCELLCLICK
+	'V.Args.Column: @Part
+	'V.Args.RowIndex: 0
+	
+	V.Local..BulkDeclareString(sSQL, sUser_3, sPrefix, sNumber)
+	
+	F.Intrinsic.Control.CallSub(GetActiveGridView,"ControlName",V.Args.ControlName)
+	
+	F.Intrinsic.Control.SelectCase(V.Args.Column.UCase)
+		F.Intrinsic.Control.Case("SIGNED_OUT_BY")
+			Gui.[V.Args.Screen].[V.Args.ControlName].GetCellValueByColumnName(V.Args.GridView,"SIGNED_OUT_BY",V.Args.RowIndex,V.Local.sUser_3)
+			Gui.[V.Args.Screen].[V.Args.ControlName].GetCellValueByColumnName(V.Args.GridView,"PREFIX",V.Args.RowIndex,V.Local.sPrefix)
+			Gui.[V.Args.Screen].[V.Args.ControlName].GetCellValueByColumnName(V.Args.GridView,"NUMBER",V.Args.RowIndex,V.Local.sNumber)
+	
+			F.Intrinsic.String.Build("UPDATE ECN_HEADER SET USER_3=LTRIM(RTRIM('{0}')) WHERE ECN_PREFIX='{1}' AND ECN_NUMBER='{2}'",V.Local.sUser_3,V.Local.sPrefix,V.Local.sNumber,V.Local.sSQL)
+			F.ODBC.Connection!con.Execute(V.Local.sSQL)
+		F.Intrinsic.Control.CaseElse
+	F.Intrinsic.Control.EndSelect
+	
+Program.Sub.GsGCData_CellValueChanged.End
+
+Program.Sub.Comments.Start
+${$5$}$20.1.8245.18323$}$1
+${$6$}$adsouza$}$20221010102755704$}$JX3L09Cgehg7O+lKYSb2ur8FFsJUp9u/kPdJ/mxsP1bW+F7ZOUohiyUAk5mAtw59c87/FSWkMoY=
+Program.Sub.Comments.End
